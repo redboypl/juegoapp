@@ -5,7 +5,6 @@
 
 import 'package:flutter/material.dart';
 import '../models/game_state.dart';
-import 'home_screen.dart';
 import 'start_screen.dart';
 import 'package:flutter/services.dart';
 
@@ -182,10 +181,11 @@ class _ResultScreenState extends State<ResultScreen>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 20, vertical: 12),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.15),
+                        color: Colors.amber.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                            color: Colors.amber.withOpacity(0.3)),
+                          color: Colors.amber.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
