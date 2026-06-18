@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 import '../models/game_state.dart';
+import '../widgets/settings_button.dart';
 import 'home_screen.dart';
 import 'shop_screen.dart';
 import 'credits_screen.dart';
@@ -82,25 +83,27 @@ class _StartScreenState extends State<StartScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
-          child: FadeTransition(
-            opacity: _fadeAnim,
-            child: SlideTransition(
-              position: _slideAnim,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // --- Monedas ---
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+            child: SafeArea(
+              child: FadeTransition(
+                opacity: _fadeAnim,
+                child: SlideTransition(
+                  position: _slideAnim,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // --- Monedas ---
                     Align(
                       alignment: Alignment.topRight,
                       child: Container(
@@ -221,7 +224,8 @@ class _StartScreenState extends State<StartScreen>
               ),
             ),
           ),
-        ),
+          const SettingsButton(),
+        ],
       ),
     );
   }

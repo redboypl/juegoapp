@@ -4,7 +4,9 @@
 // ============================================================
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/game_state.dart';
+import '../widgets/settings_button.dart';
 import 'start_screen.dart';
 import 'package:flutter/services.dart';
 
@@ -85,15 +87,34 @@ class _ResultScreenState extends State<ResultScreen>
         '(${rank.icon} ${rank.name}) con ${widget.state.correct}/${widget.state.preguntas.length} '
         'correctas y mejor racha de ${widget.state.bestStreak}! ⚾🇻🇪';
 
-    // Copiar al portapapeles
-    await _copyToClipboard(text);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Resultado copiado al portapapeles!'),
-        backgroundColor: Color(0xFF2D6A4F),
-      ),
-    );
+    try {
+      final result = await Share.share(text, subject: 'Mi resultado en Trivia Beisbolera 🇻🇪');
+      if (!mounted) return;
+      // En algunas plataformas (p.ej. desktop) Share.share no abre una
+      // hoja nativa de compartir; en ese caso copiamos al portapapeles
+      // como respaldo para que el usuario no se quede sin feedback.
+      if (result.status == ShareResultStatus.unavailable) {
+        await _copyToClipboard(text);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Resultado copiado al portapapeles!'),
+            backgroundColor: Color(0xFF2D6A4F),
+          ),
+        );
+      }
+    } catch (_) {
+      // Si share_plus falla por cualquier razón (p.ej. plataforma no
+      // soportada), recurrimos al portapapeles para no romper la UX.
+      await _copyToClipboard(text);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Resultado copiado al portapapeles!'),
+          backgroundColor: Color(0xFF2D6A4F),
+        ),
+      );
+    }
   }
 
   Future<void> _copyToClipboard(String text) async {
@@ -109,7 +130,9 @@ class _ResultScreenState extends State<ResultScreen>
     final nextRank = nextRankIndex < rangos.length ? rangos[nextRankIndex] : null;
 
     return Scaffold(
-      body: Container(
+      body: Stack(
+        children: [
+          Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
@@ -293,7 +316,9 @@ class _ResultScreenState extends State<ResultScreen>
               ),
             ),
           ),
-        ),
+          ),
+          const SettingsButton(),
+        ],
       ),
     );
   }

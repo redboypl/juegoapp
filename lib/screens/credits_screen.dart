@@ -4,6 +4,7 @@
 // ============================================================
 
 import 'package:flutter/material.dart';
+import '../widgets/settings_button.dart';
 
 class CreditsScreen extends StatelessWidget {
   const CreditsScreen({super.key});
@@ -11,7 +12,9 @@ class CreditsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
+      body: Stack(
+        children: [
+          Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
@@ -103,6 +106,9 @@ class CreditsScreen extends StatelessWidget {
             ),
           ),
         ),
+          ),
+          const SettingsButton(alignRight: true),
+        ],
       ),
     );
   }

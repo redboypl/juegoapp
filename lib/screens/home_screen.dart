@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import '../data/questions.dart';
 import '../models/game_state.dart';
+import '../widgets/settings_button.dart';
 import 'game_screen.dart';
 import 'shop_screen.dart';
 
@@ -31,7 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _coins = c);
   }
 
-  void _startGame() {
+  void _startGame() async {
     if (_selectedCatId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -42,10 +43,56 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     final cat = todasLasCategorias.firstWhere((c) => c.id == _selectedCatId);
+
+    bool useStreakStarter = false;
+    final inventory = await StorageService.loadInventory();
+    final ownedStarters = inventory['streak_starter'] ?? 0;
+
+    if (ownedStarters > 0 && mounted) {
+      useStreakStarter = await _confirmUseStreakStarter(ownedStarters) ?? false;
+      if (useStreakStarter) {
+        inventory['streak_starter'] = ownedStarters - 1;
+        await StorageService.saveInventory(inventory);
+      }
+    }
+
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (_) => GameScreen(categoria: cat),
+        builder: (_) => GameScreen(
+          categoria: cat,
+          startWithStreakBoost: useStreakStarter,
+        ),
+      ),
+    );
+  }
+
+  Future<bool?> _confirmUseStreakStarter(int owned) {
+    return showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF16213E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('🔥 Racha instantánea',
+            style: TextStyle(color: Colors.white)),
+        content: Text(
+          'Tienes $owned. ¿Quieres usar una para empezar esta partida '
+          'con una racha de 2 (te acerca al multiplicador ×1.5)?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No usar',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Usar ahora',
+                style: TextStyle(color: Color(0xFFFFC107))),
+          ),
+        ],
       ),
     );
   }
@@ -53,7 +100,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
+      body: Stack(
+        children: [
+          Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
@@ -273,6 +322,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+          ),
+          const SettingsButton(),
+        ],
       ),
     );
   }

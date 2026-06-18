@@ -7,12 +7,22 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data/questions.dart';
 import '../models/game_state.dart';
+import '../widgets/settings_button.dart';
 import 'result_screen.dart';
 import 'home_screen.dart';
 
 class GameScreen extends StatefulWidget {
   final Categoria categoria;
-  const GameScreen({super.key, required this.categoria});
+
+  /// Si viene en true, la partida arranca con racha de 2
+  /// (consumido el power-up streak_starter antes de llegar aquí).
+  final bool startWithStreakBoost;
+
+  const GameScreen({
+    super.key,
+    required this.categoria,
+    this.startWithStreakBoost = false,
+  });
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -34,6 +44,11 @@ class _GameScreenState extends State<GameScreen>
     _state.categoriaSeleccionada = widget.categoria;
     _state.preguntas = List.from(widget.categoria.questions)..shuffle();
 
+    if (widget.startWithStreakBoost) {
+      _state.streak = 2;
+      _state.bestStreak = 2;
+    }
+
     _timerController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 15),
@@ -51,6 +66,7 @@ class _GameScreenState extends State<GameScreen>
   void _startQuestion() {
     _selectedOption = null;
     _answered = false;
+    _state.hiddenOptions = {};
     _state.timeLeft = _state.activeExtraTime ? 20 : 15;
     _state.activeExtraTime = false;
 
@@ -72,7 +88,12 @@ class _GameScreenState extends State<GameScreen>
   void _handleTimeout() {
     setState(() {
       _answered = true;
-      _state.streak = 0;
+      if (_state.streakShieldActive) {
+        // El shield protege la racha una sola vez y se consume aquí.
+        _state.streakShieldActive = false;
+      } else {
+        _state.streak = 0;
+      }
     });
   }
 
@@ -103,6 +124,10 @@ class _GameScreenState extends State<GameScreen>
       if (_state.streak > _state.bestStreak) {
         _state.bestStreak = _state.streak;
       }
+    } else if (_state.streakShieldActive) {
+      // El shield protege la racha una sola vez ante una respuesta
+      // incorrecta y se consume en el acto, sin afectar el puntaje.
+      _state.streakShieldActive = false;
     } else {
       _state.streak = 0;
     }
@@ -169,7 +194,37 @@ class _GameScreenState extends State<GameScreen>
         _state.timeLeft = (_state.timeLeft + 5).clamp(0, 20);
       });
       await StorageService.saveInventory(_inventory);
+      return;
     }
+
+    if (id == 'fifty_fifty') {
+      if (_state.hiddenOptions.isNotEmpty) return; // ya usado en esta pregunta
+      final q = _state.currentQuestion;
+      final wrongIndices = List<int>.generate(q.opts.length, (i) => i)
+        ..removeWhere((i) => i == q.a);
+      wrongIndices.shuffle();
+      final toHide = wrongIndices.take(2).toSet();
+
+      setState(() {
+        _inventory[id] = (_inventory[id] ?? 1) - 1;
+        _state.hiddenOptions = toHide;
+      });
+      await StorageService.saveInventory(_inventory);
+      return;
+    }
+
+    if (id == 'streak_shield') {
+      if (_state.streakShieldActive) return; // ya activo, no acumula
+      setState(() {
+        _inventory[id] = (_inventory[id] ?? 1) - 1;
+        _state.streakShieldActive = true;
+      });
+      await StorageService.saveInventory(_inventory);
+      return;
+    }
+
+    // streak_starter no se maneja aquí: se consume antes de iniciar
+    // la partida, desde HomeScreen (usableInGame: false).
   }
 
   void _confirmBack() {
@@ -240,7 +295,9 @@ class _GameScreenState extends State<GameScreen>
     final q = _state.currentQuestion;
 
     return Scaffold(
-      body: Container(
+      body: Stack(
+        children: [
+          Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
@@ -331,42 +388,72 @@ class _GameScreenState extends State<GameScreen>
                 const SizedBox(height: 8),
 
                 // --- Racha ---
-                if (_streakText.isNotEmpty)
-                  Text(
-                    _streakText,
-                    style: const TextStyle(
-                      color: Color(0xFFFFD60A),
-                      fontWeight: FontWeight.bold,
-                    ),
+                if (_streakText.isNotEmpty || _state.streakShieldActive)
+                  Wrap(
+                    spacing: 10,
+                    children: [
+                      if (_streakText.isNotEmpty)
+                        Text(
+                          _streakText,
+                          style: const TextStyle(
+                            color: Color(0xFFFFD60A),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      if (_state.streakShieldActive)
+                        const Text(
+                          '🛡️ Protegida',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
                   ),
 
                 // --- Power-ups ---
-                if (_inventory.values.any((v) => v > 0)) ...[
+                if (powerups.any((p) =>
+                    p.usableInGame && (_inventory[p.id] ?? 0) > 0)) ...[
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     children: powerups
-                        .where((p) => (_inventory[p.id] ?? 0) > 0)
-                        .map((p) => GestureDetector(
-                              onTap: () => _usePowerup(p.id),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white10,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border:
-                                      Border.all(color: Colors.white24),
-                                ),
-                                child: Text(
-                                  '${p.icon} ×${_inventory[p.id]}',
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13),
-                                ),
-                              ),
-                            ))
-                        .toList(),
+                        .where((p) =>
+                            p.usableInGame && (_inventory[p.id] ?? 0) > 0)
+                        .map((p) {
+                      final usedUpForThisQuestion =
+                          (p.id == 'fifty_fifty' &&
+                              _state.hiddenOptions.isNotEmpty) ||
+                          (p.id == 'streak_shield' &&
+                              _state.streakShieldActive);
+                      return GestureDetector(
+                        onTap: usedUpForThisQuestion
+                            ? null
+                            : () => _usePowerup(p.id),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: usedUpForThisQuestion
+                                ? Colors.white24
+                                : Colors.white10,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: usedUpForThisQuestion
+                                  ? const Color(0xFFFFC107)
+                                  : Colors.white24,
+                            ),
+                          ),
+                          child: Text(
+                            usedUpForThisQuestion
+                                ? '${p.icon} Activo'
+                                : '${p.icon} ×${_inventory[p.id]}',
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 13),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ],
 
@@ -400,30 +487,56 @@ class _GameScreenState extends State<GameScreen>
                     itemCount: q.opts.length,
                     separatorBuilder: (_, __) =>
                         const SizedBox(height: 10),
-                    itemBuilder: (context, i) => GestureDetector(
-                      onTap: () => _selectOption(i),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: _optionColor(i),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: _answered && i == q.a
-                                ? const Color(0xFF2D6A4F)
-                                : Colors.white12,
-                            width: _answered && i == q.a ? 2 : 1,
+                    itemBuilder: (context, i) {
+                      final isHidden = _state.hiddenOptions.contains(i);
+                      if (isHidden) {
+                        return Opacity(
+                          opacity: 0.25,
+                          child: IgnorePointer(
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white10,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: Colors.white12),
+                              ),
+                              child: Text(
+                                q.opts[i],
+                                style: const TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 16,
+                                  decoration: TextDecoration.lineThrough,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      return GestureDetector(
+                        onTap: () => _selectOption(i),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: _optionColor(i),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: _answered && i == q.a
+                                  ? const Color(0xFF2D6A4F)
+                                  : Colors.white12,
+                              width: _answered && i == q.a ? 2 : 1,
+                            ),
+                          ),
+                          child: Text(
+                            q.opts[i],
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
-                        child: Text(
-                          q.opts[i],
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ),
 
@@ -479,6 +592,9 @@ class _GameScreenState extends State<GameScreen>
             ),
           ),
         ),
+          ),
+          const SettingsButton(),
+        ],
       ),
     );
   }
