@@ -1,16 +1,30 @@
 name: trivia_beisbolera
 description: Trivia Beisbolera Venezuela - App móvil nativa
 publish_to: 'none'
+
+# Versión de la app (versionName+versionCode para Google Play)
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  # Se sube el mínimo a 3.4.0 porque share_plus ^10.x y audioplayers ^6.x
+  # requieren un SDK de Dart más reciente que el 3.0.0 original.
+  sdk: '>=3.4.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
+
+  # Persistencia local de monedas e inventario de power-ups
+  # (reemplaza localStorage del script.js original)
   shared_preferences: ^2.2.2
-  audioplayers: ^5.2.1
+
+  # Reproducción de música de fondo y control de volumen
+  # (reemplaza el elemento <audio> del HTML original)
+  audioplayers: ^6.1.0
+
+  # Compartir el resultado de la partida de forma nativa
+  # (reemplaza navigator.share / clipboard del script.js original)
+  share_plus: ^10.1.3
 
 dev_dependencies:
   flutter_test:
