@@ -45,12 +45,19 @@ class Powerup {
   final String name;
   final String desc;
   final int price;
+
+  /// true: se consume con un tap durante la partida (extra_time, fifty_fifty,
+  /// streak_shield). false: se aplica automáticamente al INICIAR la partida
+  /// (streak_starter), por lo que no aparece como botón en game_screen.
+  final bool usableInGame;
+
   const Powerup({
     required this.id,
     required this.icon,
     required this.name,
     required this.desc,
     required this.price,
+    this.usableInGame = true,
   });
 }
 
@@ -58,7 +65,7 @@ const List<Powerup> powerups = [
   Powerup(id: 'extra_time',     icon: '⏱️', name: 'Tiempo extra',       desc: '+5 segundos en tu próxima pregunta', price: 15),
   Powerup(id: 'fifty_fifty',    icon: '✂️', name: '50/50',               desc: 'Elimina dos opciones incorrectas',   price: 20),
   Powerup(id: 'streak_shield',  icon: '🛡️', name: 'Protector de racha', desc: 'Si fallas, no pierdes tu racha',     price: 25),
-  Powerup(id: 'streak_starter', icon: '🔥', name: 'Racha instantánea',  desc: 'Empieza la partida con racha de 2',  price: 30),
+  Powerup(id: 'streak_starter', icon: '🔥', name: 'Racha instantánea',  desc: 'Empieza la partida con racha de 2',  price: 30, usableInGame: false),
 ];
 
 // --- Estado de una partida activa ---
@@ -73,7 +80,18 @@ class GameState {
   int totalBonus = 0;
   int timeLeft = 15;
   bool answered = false;
+
+  // --- Power-ups ---
+  // extra_time: se activa para LA SIGUIENTE pregunta (+5 seg al límite).
   bool activeExtraTime = false;
+
+  // fifty_fifty: índices de opciones a ocultar en la pregunta actual.
+  // Se recalcula cada vez que se usa, y se limpia al pasar de pregunta.
+  Set<int> hiddenOptions = {};
+
+  // streak_shield: si está activo, la próxima respuesta incorrecta
+  // NO resetea la racha (se consume una sola vez).
+  bool streakShieldActive = false;
 
   void reset() {
     current = 0;
@@ -85,6 +103,8 @@ class GameState {
     timeLeft = 15;
     answered = false;
     activeExtraTime = false;
+    hiddenOptions = {};
+    streakShieldActive = false;
   }
 
   Pregunta get currentQuestion => preguntas[current];
