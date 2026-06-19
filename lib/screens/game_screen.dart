@@ -4,6 +4,7 @@
 // ============================================================
 
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../data/questions.dart';
 import '../models/game_state.dart';
@@ -30,9 +31,20 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late GameState _state;
   late AnimationController _timerController;
+
+  // --- Animación de feedback de respuesta ---
+  late AnimationController _feedbackController;
+  late Animation<double> _scaleAnim;
+  late Animation<double> _shakeAnim;
+  bool _lastAnswerCorrect = false;
+
+  // --- Animación de timer pulsante ---
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
+
   Timer? _timer;
   int? _selectedOption;
   bool _answered = false;
@@ -55,6 +67,27 @@ class _GameScreenState extends State<GameScreen>
       duration: const Duration(seconds: 15),
     );
 
+    // --- Feedback de respuesta ---
+    _feedbackController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _scaleAnim = Tween<double>(begin: 1.0, end: 1.06).animate(
+      CurvedAnimation(parent: _feedbackController, curve: Curves.elasticOut),
+    );
+    _shakeAnim = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _feedbackController, curve: Curves.easeInOut),
+    );
+
+    // --- Timer pulsante (últimos 5 segundos) ---
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.15).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
     _loadInventory();
     _startQuestion();
   }
@@ -70,6 +103,8 @@ class _GameScreenState extends State<GameScreen>
     _state.hiddenOptions = {};
     _state.timeLeft = _state.activeExtraTime ? 20 : 15;
     _state.activeExtraTime = false;
+    _pulseController.stop();
+    _pulseController.reset();
 
     _timerController.duration = Duration(seconds: _state.timeLeft);
     _timerController.forward(from: 0);
@@ -78,9 +113,13 @@ class _GameScreenState extends State<GameScreen>
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
       setState(() => _state.timeLeft--);
+      if (_state.timeLeft == 5) {
+        _pulseController.repeat(reverse: true);
+      }
       if (_state.timeLeft <= 0) {
         t.cancel();
         _timerController.stop();
+        _pulseController.stop();
         _handleTimeout();
       }
     });
@@ -157,7 +196,11 @@ class _GameScreenState extends State<GameScreen>
     setState(() {
       _selectedOption = index;
       _answered = true;
+      _lastAnswerCorrect = isCorrect;
     });
+
+    // Disparar animación de feedback
+    _feedbackController.forward(from: 0);
   }
 
   void _nextQuestion() {
@@ -274,6 +317,8 @@ class _GameScreenState extends State<GameScreen>
   void dispose() {
     _timer?.cancel();
     _timerController.dispose();
+    _feedbackController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -381,14 +426,17 @@ class _GameScreenState extends State<GameScreen>
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Text(
-                      '${_state.timeLeft}',
-                      style: TextStyle(
-                        color: _state.timeLeft <= 5
-                            ? const Color(0xFFE63946)
-                            : Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                    ScaleTransition(
+                      scale: _pulseAnim,
+                      child: Text(
+                        '${_state.timeLeft}',
+                        style: TextStyle(
+                          color: _state.timeLeft <= 5
+                              ? const Color(0xFFE63946)
+                              : Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: _state.timeLeft <= 5 ? 22 : 18,
+                        ),
                       ),
                     ),
                   ],
@@ -523,24 +571,47 @@ class _GameScreenState extends State<GameScreen>
                       }
                       return GestureDetector(
                         onTap: () => _selectOption(i),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: _optionColor(i),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: _answered && i == q.a
-                                  ? const Color(0xFF2D6A4F)
-                                  : Colors.white12,
-                              width: _answered && i == q.a ? 2 : 1,
+                        child: AnimatedBuilder(
+                          animation: _feedbackController,
+                          builder: (_, child) {
+                            // Solo animar la opción seleccionada
+                            if (!_answered || _selectedOption != i) {
+                              return child!;
+                            }
+                            if (_lastAnswerCorrect) {
+                              // Scale up — sensación de éxito
+                              return Transform.scale(
+                                scale: _scaleAnim.value,
+                                child: child,
+                              );
+                            } else {
+                              // Shake horizontal — sensación de error
+                              final shake = (_shakeAnim.value * 6 * 3.14159).sin();
+                              return Transform.translate(
+                                offset: Offset(shake * 6, 0),
+                                child: child,
+                              );
+                            }
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: _optionColor(i),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: _answered && i == q.a
+                                    ? const Color(0xFF2D6A4F)
+                                    : Colors.white12,
+                                width: _answered && i == q.a ? 2 : 1,
+                              ),
                             ),
-                          ),
-                          child: Text(
-                            q.opts[i],
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
+                            child: Text(
+                              q.opts[i],
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
                             ),
                           ),
                         ),
